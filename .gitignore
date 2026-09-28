@@ -10,3 +10,4 @@ data/demo/
 __pycache__/
 .pytest_cache/
 /*.docx
+.zcodeignore
