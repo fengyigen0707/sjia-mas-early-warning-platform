@@ -85,5 +85,6 @@ MAS预警平台
 ## 登记去向与影响
 
 - 证据台账：`docs/references.md` #16–#19 指向本文。
+- PRD 条款实现状态（已实现 / 部分 / 明确延期）见 `docs/prd-v1-gap-checklist.md`，与本文图表登记互补、不改代码。
 - **不改**：product-proposal（提交版 v1.0）、roadmap-upgrade（不做清单）、规则阈值、`mas_score`、OCR 字段。
 - 新增的共创/访谈候选（仅登记）：MS 评分是否纳入第三判据；D-二聚体家庭可得性；官方灵敏度档位名称与完整指标清单。

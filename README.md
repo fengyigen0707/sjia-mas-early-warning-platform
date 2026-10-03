@@ -91,6 +91,7 @@ python -m evals.real_ocr_eval
 - 设计规格：`docs/superpowers/specs/2026-09-21-rareguard-t04-design.md`
 - 实施计划：`docs/superpowers/plans/`
 - 规则取值文献：`docs/references.md`
+- 官方 PRD 对照清单（已实现 / 明确延期）：`docs/prd-v1-gap-checklist.md`
 - 患者共创访谈提纲：`docs/patient-cocreation-interview-guide.md`
 - 合规与落地说明：`docs/compliance-deployment-onepager.md`
 

@@ -1,6 +1,6 @@
 # RareGuard 提升改造计划（三阶段）
 
-对应方案书 [product-proposal.md](product-proposal.md) §六「赛后计划」。本文是**工程开工清单**，不改规则阈值、不改 `mas_score`、不把 API 默认 `profile` 从 `standard` 改成 `early`。
+对应方案书 [product-proposal.md](product-proposal.md) §六「赛后计划」。本文是**工程开工清单**，不改规则阈值、不改 `mas_score`、不把 API 默认 `profile` 从 `standard` 改成 `early`。官方 PRD 对照与延期理由见 [prd-v1-gap-checklist.md](prd-v1-gap-checklist.md)。
 
 **总策略**：加强**规则主权可复验**（确定性判险 + 合成留出门禁 + 文案不越线），**不做** L3 独立坐诊、**不做**权重级自我进化、**不做** FHIR/DICOM 全量互通。
 
