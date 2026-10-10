@@ -42,6 +42,8 @@ python -m synth.generate_dataset  # 重新生成合成评测集（seed=42 可复
 
 ## 本地运行与演示
 
+**2026-10-10 工程补齐**：正常启动需要 `RAREGUARD_ACCOUNTS_FILE` 家庭账号配置；未认证演示须同时声明 `RAREGUARD_DEMO=1` 与 `RAREGUARD_OFFLINE=1`，且只使用合成数据。账号创建、登录、患者隔离、真实样例验收及部署步骤见 [试点工程交接](docs/pilot-engineering-handoff.md)。本项目开发代码在 `master`，旧 `main` 仅为原始赛题说明。
+
 参赛启动**只**用家庭端（基座预问诊 `rareguard.api.app` 为遗留，非本赛题主路径）。
 
 ```bash
@@ -49,7 +51,7 @@ python -m synth.generate_dataset  # 重新生成合成评测集（seed=42 可复
 python -m rareguard.api.home_server
 
 # 断网演示模式：OCR 走预跑缓存，叙述回退确定性模板，规则引擎照常出分
-RAREGUARD_OFFLINE=1 python -m rareguard.api.home_server
+RAREGUARD_DEMO=1 RAREGUARD_OFFLINE=1 python -m rareguard.api.home_server
 
 # 端到端演示脚本（零网络，输出建档→打卡→OCR→趋势→红色预警全链路 JSON）
 python scripts/demo_e2e.py
