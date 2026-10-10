@@ -19,7 +19,7 @@
          margin-top: 12px; font-weight: 600; }
   .btn:disabled { background: #9db8cc; }
   .btn.ghost { background: #e3eef7; color: #0b5fa5; }
-  input[type=text], input[type=date], input[type=number], input[type=file] {
+  input[type=text], input[type=password], input[type=date], input[type=number], input[type=file] {
     width: 100%; padding: 12px; font-size: 18px; border: 2px solid #b8cee0;
     border-radius: 10px; outline: none; margin-top: 8px; background: #fff; }
   label { display: block; margin-top: 10px; font-weight: 600; }
@@ -63,11 +63,22 @@
     <div class="sub">SJA 患儿 MAS 并发症动态预警 · 家庭端</div>
   </header>
 
+  <div class="card" id="authCard">
+    <label>家庭访问凭证</label>
+    <input type="password" id="accessToken" autocomplete="off" placeholder="请输入管理员单独发放的凭证">
+    <button class="btn" onclick="loginFamily()">登录</button>
+    <button class="btn ghost" onclick="logoutFamily()">退出并清除本机记录</button>
+    <div class="hint" id="authMsg">检查登录状态…</div>
+  </div>
   <div class="card" id="patientCard">
     <label>患儿档案</label>
     <input type="text" id="pid" placeholder="患儿编号，如 P05">
     <input type="text" id="pname" placeholder="称呼（选填）">
-    <button class="btn" onclick="ensurePatient()">建档 / 切换患儿</button>
+    <label>出生日期（新建档案时填写）</label><input type="date" id="dob">
+    <button class="btn" onclick="ensurePatient()">新建患儿档案</button>
+    <button class="btn ghost" onclick="switchPatient()">切换已有档案</button>
+    <button class="btn ghost" onclick="exportPatient()">导出当前档案</button>
+    <button class="btn ghost" onclick="deletePatient()">删除当前档案</button>
     <div class="hint" id="curPatient"></div>
   </div>
 
@@ -92,6 +103,7 @@
     <div class="card">
       <strong>拍照 / 选择化验单</strong>
       <input type="file" id="labFile" accept="image/*">
+      <label><input type="checkbox" id="cloudConsent"> 我已遮去姓名、身份证号等身份信息，并同意将此图交给云端服务识别；也可使用手工录入。</label>
       <label>化验日期</label>
       <input type="date" id="labDate">
       <button class="btn" onclick="uploadLab()">解析化验单</button>
@@ -155,6 +167,45 @@
 const SYMPTOMS = ["发热","关节痛","皮疹","疲劳","出血点","腹痛","头痛","呕吐"];
 const LEVEL_CN = { green:"绿灯 · 平稳", yellow:"黄灯 · 需关注", red:"红灯 · 高危" };
 let lastRisk = null;
+function esc(v) { const el = document.createElement('span'); el.textContent = String(v ?? ''); return el.innerHTML; }
+async function loginFamily() {
+  const input = document.getElementById('accessToken');
+  const token = input.value; input.value = '';
+  try {
+    const r = await j('/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token})});
+    document.getElementById('authMsg').textContent = '已登录：' + r.user;
+    clearPatientView();
+  } catch(e) { document.getElementById('authMsg').textContent = e.message; }
+}
+function clearPatientView() {
+  lastRisk = null; window._ocrItems = [];
+  for (const key of ['rg_pid','rg_streak','rg_early']) localStorage.removeItem(key);
+  for (const id of ['pid','pname','dob','labFile','mName','mValue','mUnit']) document.getElementById(id).value='';
+  for (const id of ['curPatient','lightBox','hitsBox','alertText','alertHits','trendChart','itemsBox','ocrMsg','ckMsg','streak']) document.getElementById(id).textContent='';
+  document.getElementById('cloudConsent').checked=false;
+  closeModal();
+}
+async function logoutFamily() { await j('/api/auth/logout', {method:'POST'}); clearPatientView(); document.getElementById('authMsg').textContent='已退出'; }
+async function switchPatient() {
+  try {
+    const p = await j('/api/home/patients/'+encodeURIComponent(pid()));
+    document.getElementById('pname').value=p.name; document.getElementById('dob').value=p.dob;
+    document.getElementById('curPatient').textContent='当前患儿：'+p.pid;
+    refreshRisk();
+  } catch(e) { alert(e.message); }
+}
+async function exportPatient() {
+  try {
+    const data = await j('/api/home/export/'+encodeURIComponent(pid()));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+    const a = document.createElement('a'); a.href=url; a.download='rareguard-patient.json'; a.click(); URL.revokeObjectURL(url);
+  } catch(e) { alert(e.message); }
+}
+async function deletePatient() {
+  if (!pid() || !confirm('确认删除当前患儿全部化验、打卡和档案？此操作不能撤销。')) return;
+  try { const r=await j('/api/home/patients/'+encodeURIComponent(pid()),{method:'DELETE'}); clearPatientView(); alert(r.notice); }
+  catch(e) { alert(e.message); }
+}
 
 function today() { return new Date().toISOString().slice(0, 10); }
 function profileQS() {
@@ -180,7 +231,11 @@ function toggleEarly() {
 function pid() { return document.getElementById("pid").value.trim(); }
 async function j(url, opt) {
   const r = await fetch(url, opt);
-  if (!r.ok) throw new Error("HTTP " + r.status);
+  if (!r.ok) {
+    if(r.status===401) { clearPatientView(); document.getElementById('authMsg').textContent='请先登录'; }
+    const body=await r.json().catch(()=>({}));
+    throw new Error(typeof body.detail==='string' ? body.detail : '输入无效或请求失败（'+r.status+'）');
+  }
   return r.json();
 }
 function go(v) {
@@ -192,14 +247,16 @@ function go(v) {
 }
 async function ensurePatient() {
   if (!pid()) { alert("请填写患儿编号"); return; }
+  if (!document.getElementById('dob').value) { alert('请填写出生日期'); return; }
+  try {
   await j("/api/home/patients", { method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pid: pid(),
       name: document.getElementById("pname").value || pid(),
-      dob: "2015-01-01" }) });
-  localStorage.setItem("rg_pid", pid());
+      dob: document.getElementById('dob').value }) });
   document.getElementById("curPatient").textContent = "当前患儿：" + pid();
   refreshRisk();
+  } catch(e) { alert(e.message); }
 }
 async function refreshRisk() {
   if (!pid()) return;
@@ -213,13 +270,13 @@ async function refreshRisk() {
     document.getElementById("hitsBox").innerHTML =
       hits.length ? hits.join("<br>") : "暂无触发项";
     document.getElementById("alertText").innerHTML =
-      risk.text.replaceAll("\n", "<br>");
+      esc(risk.text).replaceAll("\n", "<br>");
     document.getElementById("alertHits").innerHTML = hits.length
       ? "<table><tr><th>规则</th><th>提示</th><th>级别</th></tr>" +
         risk.hits.map(h => `<tr><td>${h.rule_id}</td><td>${h.name}</td>
          <td>${h.level}</td></tr>`).join("") + "</table>" : "暂无";
     if (risk.level === "red") {
-      document.getElementById("modalText").innerHTML = risk.text;
+      document.getElementById("modalText").textContent = risk.text;
       document.getElementById("mask").style.display = "flex";
     }
     drawTrend();
@@ -254,6 +311,8 @@ async function drawTrend() {
 async function uploadLab() {
   const f = document.getElementById("labFile").files[0];
   if (!f) { alert("请先选择化验单照片"); return; }
+  if (f.size>5000000) { alert('图片不能超过5MB'); return; }
+  try {
   const b64 = (await new Promise(res => {
     const r = new FileReader();
     r.onload = () => res(r.result.split(",")[1]);
@@ -263,37 +322,45 @@ async function uploadLab() {
   msg.textContent = "解析中…";
   const body = await j("/api/home/labs/upload", { method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pid: pid(), date, image_b64: b64 }) });
+    body: JSON.stringify({ pid: pid(), date, image_b64: b64, cloud_consent:document.getElementById('cloudConsent').checked }) });
   document.getElementById("manualBox").style.display =
     body.ocr_error || (body.items || []).some(i => i.needs_review) ? "" : "none";
   if (body.ocr_error) { msg.textContent = "OCR 服务不可用，请使用下方手工录入。";
     document.getElementById("itemsBox").innerHTML = ""; return; }
-  msg.textContent = `解析完成：${body.committed} 项已自动入库，黄色行为待核对项。`;
+  msg.textContent = body.committed ? `演示模式：${body.committed} 项已入库。` : '请逐项对照原单核对数值与单位，确认后才入库。';
   document.getElementById("itemsBox").innerHTML =
     `<table><tr><th>项目</th><th>值</th><th>单位</th><th>状态</th></tr>` +
     body.items.map((i, k) => `<tr class="${i.needs_review ? "review" : "done"}">
-      <td>${i.name}</td><td>${i.value ?? ""}</td><td>${i.unit ?? ""}</td>
+      <td>${esc(i.name)}</td><td>${esc(i.raw_value ?? i.value)}</td><td>${esc(i.unit)}</td>
       <td>${i.needs_review
         ? `<button class="btn ghost" style="width:auto;padding:6px 10px;margin:0"
              onclick="confirmItem(${k})">核对入库</button>` : "已入库"}</td>
     </tr>`).join("") + "</table>";
   window._ocrItems = body.items;
+  } catch(e) { document.getElementById('ocrMsg').textContent=e.message; }
 }
 async function confirmItem(k) {
   const i = window._ocrItems[k];
-  await j("/api/home/labs/manual", { method: "POST",
+  const entered = prompt('对照原单确认或修正数值：'+i.name+'（'+i.unit+'）', i.raw_value ?? i.value ?? '');
+  if (entered===null || entered.trim()==='') return;
+  try {
+  const r = await j("/api/home/labs/manual", { method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pid: pid(),
       date: document.getElementById("labDate").value || today(),
-      items: [{ name: i.name, value: Number(i.value), unit: i.unit || "" }] }) });
+      items: [{ name: i.name, value: Number(entered), unit: i.unit || "" }] }) });
+  if (!r.results[0].ok) { alert('未入库，请核对项目名和单位并使用手工录入'); return; }
   i.needs_review = false;
   uploadRefreshRow(k);
+  } catch(e) { alert(e.message); }
 }
 function uploadRefreshRow(k) {
   document.getElementById("ocrMsg").textContent = "已确认入库。";
   document.querySelectorAll("#itemsBox tr")[k + 1].className = "done";
 }
 async function manualAdd() {
+  if (document.getElementById('mValue').value.trim()==='') { alert('请填写结果值'); return; }
+  try {
   const item = { name: document.getElementById("mName").value.trim(),
     value: Number(document.getElementById("mValue").value),
     unit: document.getElementById("mUnit").value.trim() };
@@ -304,6 +371,7 @@ async function manualAdd() {
       date: document.getElementById("labDate").value || today(), items: [item] }) });
   const res = r.results[0];
   alert(res.ok ? `已入库：${res.code}` : "未能识别该项目，请核对名称/单位");
+  } catch(e) { alert(e.message); }
 }
 function buildSymptoms() {
   document.getElementById("syms").innerHTML = SYMPTOMS.map((s, i) =>
@@ -311,6 +379,7 @@ function buildSymptoms() {
      <input type="range" min="0" max="10" value="3" id="vas${i}"></div>`).join("");
 }
 async function submitCheckin() {
+  try {
   const symptoms = {};
   SYMPTOMS.forEach((s, i) => {
     if (document.getElementById("sym" + i).checked)
@@ -323,6 +392,7 @@ async function submitCheckin() {
   bumpStreak(date);
   document.getElementById("ckMsg").textContent = "今日打卡已保存，继续加油！";
   refreshRisk();
+  } catch(e) { document.getElementById('ckMsg').textContent=e.message; }
 }
 function bumpStreak(date) {
   const st = JSON.parse(localStorage.getItem("rg_streak") || '{"d":"","n":0}');
@@ -333,6 +403,9 @@ function bumpStreak(date) {
   document.getElementById("streak").textContent = `已连续打卡 ${st.n} 天`;
 }
 window.addEventListener("DOMContentLoaded", () => {
+  j('/api/auth/status').then(r=>{
+    document.getElementById('authMsg').textContent=r.required ? (r.user ? '已登录：'+r.user : '请先登录') : '仅合成数据离线演示';
+  });
   document.getElementById("labDate").value = today();
   document.getElementById("ckDate").value = today();
   buildSymptoms();
