@@ -2,6 +2,7 @@
 
 风险结论仍来自规则引擎；此处只做展示层翻译，注入固定免责声明。
 """
+from html import escape
 _LAB_LABELS = {
     "ferritin": "血清铁蛋白", "crp": "C反应蛋白", "esr": "血沉",
     "plt": "血小板计数", "fib": "纤维蛋白原", "alt": "谷丙转氨酶",
@@ -46,6 +47,7 @@ def _trend_svg(points):
 
 
 def render_summary_html(pid, name, as_of, level, score, hits, points, labs):
+    pid, name, as_of = (escape(str(v)) for v in (pid, name, as_of))
     color = {"red": "#c0392b", "yellow": "#e0a800"}.get(level, "#2e7d32")
     level_cn = {"red": "红（高危）", "yellow": "黄（警戒）"}.get(level, "绿（观察）")
 
@@ -54,11 +56,11 @@ def render_summary_html(pid, name, as_of, level, score, hits, points, labs):
 
     rows = "".join(
         f'<tr style="{"background:#fdecea" if l["abnormal"] else ""}">'
-        f'<td>{_LAB_LABELS.get(l["code"], l["code"])}</td>'
+        f'<td>{escape(str(_LAB_LABELS.get(l["code"], l["code"])))}</td>'
         f'<td>{_num(l["value"])}</td>'
         f'<td>{_num(l["ref_low"])} - {_num(l["ref_high"])}</td></tr>'
         for l in labs)
-    hitlist = "".join(f"<li>{h['name']}（{h['level']}）</li>" for h in hits)
+    hitlist = "".join(f"<li>{escape(str(h['name']))}（{escape(str(h['level']))}）</li>" for h in hits)
     return f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <title>就诊摘要 {name}</title><style>
 body{{font-family:system-ui,"Microsoft YaHei",sans-serif;margin:24px;
