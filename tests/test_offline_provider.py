@@ -44,7 +44,8 @@ def test_offline_narrate_always_raises():
         OfflineNarrate().chat([{"role": "user", "content": "x"}])
 
 
-def test_served_app_offline_end_to_end(tmp_path):
+def test_served_app_offline_end_to_end(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAREGUARD_DEMO", "1")
     store = Store(str(tmp_path / "s.db"))
     app = create_served_app(store=store, offline=True)
     with TestClient(app) as c:
@@ -65,7 +66,8 @@ def test_served_app_offline_end_to_end(tmp_path):
     store.close()
 
 
-def test_home_page_contains_four_screens(tmp_path):
+def test_home_page_contains_four_screens(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAREGUARD_DEMO", "1")
     store = Store(str(tmp_path / "p.db"))
     app = create_served_app(store=store, offline=True)
     with TestClient(app) as c:

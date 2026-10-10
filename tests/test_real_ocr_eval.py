@@ -1,6 +1,7 @@
 import json
 
 from evals.real_ocr_eval import evaluate_samples
+from evals.real_ocr_eval import main
 from rareguard.llm.provider import BaseLLMProvider, LLMResponse
 
 
@@ -39,3 +40,32 @@ def test_evaluate_samples_scores_mismatch_below_one(tmp_path):
         json.dumps(label, ensure_ascii=False), encoding="utf-8")
     r = evaluate_samples(tmp_path, _MatchOCR())
     assert 0.0 <= r["mean_accuracy"] < 1.0
+
+
+def test_require_real_does_not_pass_missing_samples(tmp_path):
+    assert main(["eval", str(tmp_path), "--require-real"]) == 2
+
+
+def test_missing_label_is_an_incomplete_report(tmp_path):
+    _sample(tmp_path)
+    (tmp_path / "unlabeled.png").write_bytes(b"png")
+    r = evaluate_samples(tmp_path, _MatchOCR())
+    assert r["files"] == 1 and r["expected_files"] == 2
+    assert not r["complete"] and r["errors"]
+
+
+def test_empty_labels_cannot_score_as_perfect(tmp_path):
+    _sample(tmp_path)
+    (tmp_path / "lab1.json").write_text("[]")
+    r = evaluate_samples(tmp_path, _MatchOCR())
+    assert not r["complete"] and r["field_accuracy"] == 0
+
+
+def test_provider_failures_are_recorded_without_patient_data(tmp_path):
+    _sample(tmp_path)
+    class Fail:
+        def chat(self, messages):
+            raise RuntimeError("sensitive patient data")
+    r = evaluate_samples(tmp_path, Fail())
+    assert not r["complete"]
+    assert "sensitive patient data" not in json.dumps(r)
