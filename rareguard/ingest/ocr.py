@@ -4,8 +4,9 @@
 needs_review，未经人工确认不得入库（spec §3.3）。
 """
 import base64
+import math
 
-from rareguard.analysis.normalize import normalize, UnknownIndicator
+from rareguard.analysis.normalize import normalize, UnknownIndicator, UnitConversionError
 from rareguard.llm.provider import extract_json
 
 OCR_SYSTEM = "OCR-LAB"
@@ -33,15 +34,22 @@ def parse_lab_report(image_b64: str, provider) -> list[dict]:
 
 
 def _normalize_item(item: dict) -> dict:
-    out = {"name": item.get("name"), "code": None, "value": None,
-           "unit": item.get("unit"), "ref_low": item.get("ref_low"),
-           "ref_high": item.get("ref_high"), "needs_review": True}
+    def finite_number(value):
+        try:
+            number = float(value)
+            return number if math.isfinite(number) and number >= 0 else None
+        except (ValueError, TypeError):
+            return None
+    out = {"name": str(item.get("name", ""))[:100], "code": None, "value": None,
+           "raw_value": finite_number(item.get("value")),
+           "unit": str(item.get("unit", ""))[:40], "ref_low": finite_number(item.get("ref_low")),
+           "ref_high": finite_number(item.get("ref_high")), "needs_review": True}
     try:
         code, value = normalize(str(item.get("name", "")),
                                 float(item["value"]),
                                 str(item.get("unit", "")))
         out.update(code=code, value=value, needs_review=False)
-    except (UnknownIndicator, KeyError, TypeError, ValueError):
+    except (UnknownIndicator, UnitConversionError, KeyError, TypeError, ValueError):
         pass
     return out
 
