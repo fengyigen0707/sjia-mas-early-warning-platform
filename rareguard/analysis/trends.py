@@ -9,13 +9,13 @@ def _ratios(vals):
 
 
 def _rising(vals, step_min, last_min) -> bool:
-    if len(vals) < 3 or vals[-1] < last_min:
+    if len(vals) < 3 or vals[-1] < last_min or any(v <= 0 for v in vals[-3:]):
         return False
     return all(r >= 1 + step_min for r in _ratios(vals[-3:]))
 
 
 def _falling_tail(vals, step_max, n) -> bool:
-    if len(vals) < n + 1:
+    if len(vals) < n + 1 or any(v <= 0 for v in vals[-(n + 1):]):
         return False
     return all(r <= 1 - step_max for r in _ratios(vals[-(n + 1):]))
 
@@ -54,7 +54,7 @@ def eval_trend(series: dict) -> list:
         break
 
     p = vals("plt")
-    if len(p) >= 3 and p[-1] < 150 and all(r <= 0.92 for r in _ratios(p[-3:])):
+    if len(p) >= 3 and all(v > 0 for v in p[-3:]) and p[-1] < 150 and all(r <= 0.92 for r in _ratios(p[-3:])):
         hits.append(RuleHit("B3", "血小板连续下降", "yellow", {"last": p[-1]}))
 
     fb = vals("fib")

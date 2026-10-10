@@ -1,4 +1,5 @@
 """指标别名与单位归一化：OCR/手工录入入库前的统一契约。"""
+import math
 
 
 class UnknownIndicator(Exception):
@@ -55,4 +56,7 @@ def normalize(code_or_alias: str, value: float, unit: str) -> tuple[str, float]:
     if unit_key not in table:
         raise UnitConversionError(f"{code}: {unit}")
     factor, offset = table[unit_key]
-    return code, value * factor + offset
+    converted = value * factor + offset
+    if not math.isfinite(converted) or converted < 0:
+        raise ValueError("指标必须为非负有限数值")
+    return code, converted
